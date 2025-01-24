@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+
+import math
+import sys
+
+def load_data(filepath):
+    data = {}
+    try:
+        with open(filepath, 'r') as file:
+            headers = file.readline().strip().split(';')
+            for line in file:
+                values = line.strip().split(';')
+                country_code = values[1]
+
+                try:
+                    years = [int(year) for year in headers[2:]]
+                except ValueError as e:
+                    continue
+
+                try:
+                    population = [int(pop) if pop not in ['..', ''] else None for pop in values[2:]]
+                except ValueError as e:
+                    continue
+
+                data[country_code] = {
+                    'name': values[0],
+                    'years': years,
+                    'population': population
+                }
+    except Exception as e:
+        sys.exit(84)
+    return data
+
+def get_country_data(data, country_code):
+    if country_code not in data:
+        sys.exit(84)
+    return data[country_code]
+
+def linear_regression(x, y):
+    n = len(x)
+    sum_x = sum(x)
+    sum_y = sum(y)
+    sum_x_squared = sum(xi ** 2 for xi in x)
+    sum_xy = sum(x[i] * y[i] for i in range(n))
+    a = (n * sum_xy - sum_x * sum_y) / (n * sum_x_squared - sum_x ** 2)
+    b = (sum_y * sum_x_squared - sum_x * sum_xy) / (n * sum_x_squared - sum_x ** 2)
+    return a, b
+
+def rms_deviation(y, y_pred):
+    n = len(y)
+    squared_diff = [(y[i] - y_pred[i]) ** 2 for i in range(n)]
+    rmsd = (sum(squared_diff) / n) ** 0.5
+    return rmsd
+
+def correlation_coefficient(x, y, y_pred):
+    mean_y = sum(y) / len(y)
+    tss = sum((yi - mean_y) ** 2 for yi in y)
+    rss = sum((y[i] - y_pred[i]) ** 2 for i in range(len(y)))
+    correlation = 1 - (rss / tss)
+    return correlation
+
+def predict_population(a, b, value):
+    return a * value + b
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(84)
+
+    country_code = sys.argv[1]
+    data_file = 'data/105demography_data.csv'
+    data = load_data(data_file)
+    country_data = get_country_data(data, country_code)
+    years = country_data['years']
+    population = [p / 1_000_000 for p in country_data['population'] if p is not None]
+    valid_years = [years[i] for i in range(len(years)) if country_data['population'][i] is not None]
+
+    a, b = linear_regression(valid_years, population)
+    y_pred = [a * year + b for year in valid_years]
+    rmsd1 = rms_deviation(population, y_pred)
+    pop_2050_1 = predict_population(a, b, 2050)
+    print(f"Country: {country_data['name']}")
+    print(f"Fit1\n    Y = {a:.2f} X + {b:.2f}")
+    print(f"    Root-mean-square deviation: {rmsd1:.2f}")
+    print(f"    Population in 2050: {pop_2050_1:.2f}")
+
+    a_y, b_y = linear_regression(population, valid_years)
+    x_pred = [a_y * pop + b_y for pop in population]
+    rmsd2 = rms_deviation(valid_years, x_pred)
+    pop_2050_2 = predict_population(a_y, b_y, pop_2050_1)  # Utiliser la population prédite pour 2050
+
+    print(f"Fit2\n    X = {a_y:.2f} Y + {b_y:.2f}")
+    print(f"    Root-mean-square deviation: {rmsd2:.2f}")
+    print(f"    Population in 2050: {pop_2050_2:.2f}")
+
+    correlation = correlation_coefficient(valid_years, population, y_pred)
+    print(f"Correlation: {correlation:.4f}")
+
+if __name__ == "__main__":
+    main()
